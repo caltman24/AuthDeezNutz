@@ -1,0 +1,6 @@
+@AuthDeezNutz.Api_HostAddress = http://localhost:5168
+
+GET {{AuthDeezNutz.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthDeezNutz.Api", "AuthDeezNutz.Api\AuthDeezNutz.Api.csproj", "{39D76761-D681-158F-61BA-D3C07F758013}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{39D76761-D681-158F-61BA-D3C07F758013}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39D76761-D681-158F-61BA-D3C07F758013}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39D76761-D681-158F-61BA-D3C07F758013}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39D76761-D681-158F-61BA-D3C07F758013}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {40889A5A-B3E3-4EBA-923E-8597FF898257}
+	EndGlobalSection
+EndGlobal
