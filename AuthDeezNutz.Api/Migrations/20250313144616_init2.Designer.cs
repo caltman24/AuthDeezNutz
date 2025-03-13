@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AuthDeezNutz.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250312191915_identity1")]
-    partial class identity1
+    [Migration("20250313144616_init2")]
+    partial class init2
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -114,33 +114,6 @@ namespace AuthDeezNutz.Api.Migrations
                     b.HasKey("Token");
 
                     b.ToTable("RefreshTokens");
-                });
-
-            modelBuilder.Entity("AuthDeezNutz.Api.Models.UserIdentity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ProviderId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserIdentities");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -275,17 +248,6 @@ namespace AuthDeezNutz.Api.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AuthDeezNutz.Api.Models.UserIdentity", b =>
-                {
-                    b.HasOne("AuthDeezNutz.Api.Models.AppUser", "User")
-                        .WithMany("Identities")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -335,11 +297,6 @@ namespace AuthDeezNutz.Api.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("AuthDeezNutz.Api.Models.AppUser", b =>
-                {
-                    b.Navigation("Identities");
                 });
 #pragma warning restore 612, 618
         }

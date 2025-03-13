@@ -11,7 +11,6 @@ public class AppDbContext : IdentityDbContext<AppUser>
     }
     
     public DbSet<RefreshToken> RefreshTokens { get; set; }
-    public DbSet<UserIdentity> UserIdentities { get; set; }
     
     protected override void OnModelCreating(ModelBuilder builder)
     {

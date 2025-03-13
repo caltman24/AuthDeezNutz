@@ -2,17 +2,18 @@ import { redirect } from "@remix-run/react";
 import { destroySession, getSession } from "~/utils/session.server";
 
 export async function loader({ request }: { request: Request }) {
+    const session = await getSession(request);
+    const tokens = session.get("tokens");
+
     const res = await fetch("http://localhost:5168/auth/logout", {
-        credentials: "include",
         headers: {
-            "Accept": "application/json",
-            "cookie": request.headers.get("Cookie") || ""
+            "Authorization": `Bearer ${tokens.access_token}`,
         }
     });
 
-    if (res.status === 200) {
-        const session = await getSession(request);
+    console.log(res)
 
+    if (res.status === 200) {
         return redirect("/", {
             headers: {
                 "Set-Cookie": await destroySession(session),

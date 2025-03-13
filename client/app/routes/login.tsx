@@ -3,7 +3,7 @@ import { Form, json, redirect, useActionData } from "@remix-run/react";
 import { getSession } from "~/utils/session.server";
 
 export async function action({ request }: { request: Request }) {
-    return redirect("https://localhost:7084/auth/login")
+    return redirect("https://localhost:7084/auth/login?provider=Google&returnUrl=http://localhost:5173/auth-cb");
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {

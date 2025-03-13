@@ -23,9 +23,33 @@ public class AuthService : IAuthService
         _userManager = userManager;
     }
 
-    public (string accessToken, string refreshToken) GenerateTokens(ClaimsPrincipal claimsPrincipal, string userId)
+
+    /// <summary>
+    /// Generates an access token and refresh token. Handles database operations.
+    /// </summary>
+    /// <param name="user"></param>
+    /// <param name="roles"></param>
+    /// <param name="claimsPrincipal"></param>
+    /// <returns></returns>
+    public async Task<(string accessToken, string refreshToken)> GenerateTokensAsync(AppUser user, List<string> roles,
+        ClaimsPrincipal? claimsPrincipal = null)
     {
-        var claims = claimsPrincipal.Claims.ToList();
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        };
+
+        if (claimsPrincipal != null)
+        {
+            var name = claimsPrincipal.FindFirstValue(ClaimTypes.Name);
+            var picture = claimsPrincipal.FindFirstValue(ClaimTypes.Uri);
+            claims.Add(new Claim(JwtRegisteredClaimNames.Name, name ?? ""));
+            claims.Add(new Claim(JwtRegisteredClaimNames.Picture, picture ?? ""));
+        }
+
+        claims.AddRange(roles.Select(role => new Claim("role", role)));
 
         // Access Token
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
@@ -40,9 +64,25 @@ public class AuthService : IAuthService
         var accessTokenString = new JwtSecurityTokenHandler().WriteToken(accessToken);
         var refreshToken = GenerateRefreshToken();
 
+        // add new refresh token to db
+        await _dbContext.RefreshTokens.AddAsync(new RefreshToken
+        {
+            Token = refreshToken,
+            Created = DateTime.UtcNow,
+            Expires = DateTime.UtcNow.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenLifetimeDays")),
+            UserId = user.Id,
+            IsRevoked = false
+        });
+        await _dbContext.SaveChangesAsync();
+
         return (accessTokenString, refreshToken);
     }
 
+    /// <summary>
+    /// Validates an access token.
+    /// </summary>
+    /// <param name="accessToken">Access token to validate.</param>
+    /// <returns>Returns null if invalid.</returns>
     public ClaimsPrincipal? ValidateAccessToken(string accessToken)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
@@ -62,7 +102,11 @@ public class AuthService : IAuthService
         return principal;
     }
 
-    public string GenerateRefreshToken()
+    /// <summary>
+    /// Generates a 64 byte refresh token
+    /// </summary>
+    /// <returns></returns>
+    private static string GenerateRefreshToken()
     {
         var randomNumber = new byte[64];
         using var rng = RandomNumberGenerator.Create();
@@ -75,45 +119,56 @@ public class AuthService : IAuthService
     /// refresh token is invalid or expired or the access token is invalid, returns null. Handles database operations.
     /// </summary>
     /// <param name="accessToken"></param>
-    /// <returns></returns>
-    public async Task<(string accessToken, string refreshToken)?> RevokeAndRefreshTokens(string accessToken)
+    /// <param name="refreshToken"></param>
+    /// <returns>Returns null if invalid or expired</returns>
+    public async Task<(string accessToken, string refreshToken)?> RevokeAndRefreshTokens(string accessToken,
+        string refreshToken)
     {
-        var refreshToken = await _dbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == accessToken);
+        var oldToken = await _dbContext.RefreshTokens.FirstOrDefaultAsync(x => x.Token == refreshToken);
 
-        if (refreshToken == null || refreshToken.IsRevoked || refreshToken.Expires < DateTime.UtcNow)
+        if (oldToken == null || oldToken.IsRevoked || oldToken.Expires < DateTime.UtcNow)
         {
             return null;
         }
 
         var principal = ValidateAccessToken(accessToken);
 
-        var userId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = principal?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId == null) return null;
 
         var user = await _userManager.FindByIdAsync(userId);
         if (user == null) return null;
 
-        var (newAccessToken, newRefreshToken) = GenerateTokens(principal!, userId);
+        var roles = await _userManager.GetRolesAsync(user);
 
-        refreshToken.IsRevoked = true;
-        await _dbContext.RefreshTokens.AddAsync(
-            new RefreshToken
-            {
-                Token = newRefreshToken,
-                Created = DateTime.UtcNow,
-                Expires = DateTime.UtcNow.AddDays(_configuration.GetValue<int>("Jwt:RefreshTokenLifetimeDays")),
-                UserId = userId,
-                IsRevoked = false
-            });
-        await _dbContext.SaveChangesAsync();
+        oldToken.IsRevoked = true;
+
+        var (newAccessToken, newRefreshToken) = await GenerateTokensAsync(user, roles.ToList(), principal);
 
         return (newAccessToken, newRefreshToken);
+    }
+
+    public async Task RevokeAllUserRefreshTokens(string userId)
+    {
+        // Revoke all refresh tokens for this user
+        var userTokens = await _dbContext.RefreshTokens
+            .Where(t => t.UserId == userId && !t.IsRevoked)
+            .ToListAsync();
+
+        foreach (var token in userTokens)
+        {
+            token.IsRevoked = true;
+        }
+
+        await _dbContext.SaveChangesAsync();
     }
 }
 
 public interface IAuthService
 {
-    (string accessToken, string refreshToken) GenerateTokens(ClaimsPrincipal claimsPrincipal, string userId);
-    Task<(string accessToken, string refreshToken)?> RevokeAndRefreshTokens(string accessToken);
-    ClaimsPrincipal? ValidateAccessToken(string accessToken);
+    Task<(string accessToken, string refreshToken)> GenerateTokensAsync(AppUser user, List<string> roles,
+        ClaimsPrincipal? claims = null);
+
+    Task<(string accessToken, string refreshToken)?> RevokeAndRefreshTokens(string accessToken, string refreshToken);
+    Task RevokeAllUserRefreshTokens(string userId);
 }
