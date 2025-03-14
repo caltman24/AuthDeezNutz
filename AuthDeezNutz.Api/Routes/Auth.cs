@@ -2,9 +2,9 @@
 using System.Web;
 using AuthDeezNutz.Api.Data;
 using AuthDeezNutz.Api.Models;
-using AuthDeezNutz.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -19,36 +19,34 @@ public static class Auth
 
         // Remix app hits this login endpoint
         // Then, we redirect to the Google auth endpoint
-        authGroup.MapGet("/login", ([FromQuery] string provider, [FromQuery] string returnUrl) => Results.Challenge(
+        authGroup.MapGet("/login-external", ([FromQuery] string provider, [FromQuery] string returnUrl) =>
+        Results.Challenge(
             new AuthenticationProperties
             {
                 RedirectUri = $"/oauth/callback?returnUrl={HttpUtility.UrlEncode(returnUrl)}",
                 Items = { { "LoginProvider", provider } }
             }, [provider]));
 
-        authGroup.MapPost("/refresh",
-            async (RefreshTokenModel refreshTokenModel,
-                IAuthService authService) =>
-            {
-                var res = await authService.RevokeAndRefreshTokens(refreshTokenModel.AccessToken,
-                    refreshTokenModel.RefreshToken);
-
-                return res == null
-                    ? Results.Unauthorized()
-                    : Results.Ok(new { res.Value.accessToken, res.Value.refreshToken });
-            }).RequireAuthorization();
-
-        authGroup.MapGet("/logout", async (HttpContext context, IAuthService authService) =>
+        // email password login
+        authGroup.MapGet("/login", async (HttpContext context, [FromQuery] string returnUrl) =>
         {
-            var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            
-            if (userId != null)
+            await context.SignInAsync(new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
             {
-                await authService.RevokeAllUserRefreshTokens(userId);
-            }
-            
+                new Claim(ClaimTypes.Name, "test"),
+                new Claim(ClaimTypes.Role, "user")
+            })), new AuthenticationProperties
+            {
+                IsPersistent = true,
+                RedirectUri = returnUrl,
+            });
+        });
+
+        authGroup.MapGet("/logout", async (HttpContext context,SignInManager<AppUser> signInManager) =>
+        {
+            await context.SignOutAsync(IdentityConstants.ApplicationScheme);
+            await context.SignOutAsync(IdentityConstants.ExternalScheme);
             await context.SignOutAsync();
-            return Results.Redirect("/");
+            await signInManager.SignOutAsync();
         }).RequireAuthorization();
 
         return app;
@@ -63,9 +61,7 @@ public static class Auth
         // We redirect to the remix callback endpoint because the Remix app needs to set the access token in the cookie
         authGroup.MapGet("/callback", async (
             HttpContext context,
-            IAuthService authService,
             AppDbContext dbContext,
-            IConfiguration configuration,
             UserManager<AppUser> userManager,
             [FromQuery] string returnUrl,
             [FromServices] SignInManager<AppUser> signInManager) =>
@@ -76,21 +72,17 @@ public static class Auth
                 return Results.BadRequest("Failed to get info from Google");
             }
 
+            var picture = info.Principal.FindFirstValue("picture");
+            var givenName = info.Principal.FindFirstValue(ClaimTypes.GivenName);
+            var surname = info.Principal.FindFirstValue(ClaimTypes.Surname);
+
             // try to sign in the user with this external login provider if the user already exists
             var result =
-                await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
+                await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
+            
             if (result.Succeeded)
             {
-                // user is already linked, generate access token 
-                var existingUser = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
-                if (existingUser == null)
-                {
-                    return Results.BadRequest("Failed to get existing user");
-                }
-
-                var (aToken, rToken) = await authService.GenerateTokensAsync(existingUser, ["user"], info.Principal);
-                return Results.Redirect(
-                    $"{returnUrl}?access_token={HttpUtility.UrlEncode(aToken)}&refresh_token={HttpUtility.UrlEncode(rToken)}");
+                return Results.Redirect(returnUrl);
             }
 
             // user does not exist, create user
@@ -111,33 +103,25 @@ public static class Auth
                     EmailConfirmed = true,
                     Role = "User"
                 };
-
                 // add user to db
                 await userManager.CreateAsync(user);
+
+                await userManager.AddClaimsAsync(user, [
+                    new Claim("picture", picture ?? ""),
+                    new Claim(ClaimTypes.GivenName, givenName ?? ""),
+                    new Claim(ClaimTypes.Surname, surname ?? "")
+                ]);
             }
 
-            //link the external login to the user
+            // link the external login to the user
             await userManager.AddLoginAsync(user, info);
-            await signInManager.SignInAsync(user, isPersistent: false);
+            await signInManager.SignInAsync(user, isPersistent: true);
 
-            // generate access token 
-            var (accessToken, refreshToken) = await authService.GenerateTokensAsync(user, ["user"], info.Principal);
-            await dbContext.RefreshTokens.AddAsync(new RefreshToken
-            {
-                Token = refreshToken,
-                Created = DateTime.UtcNow,
-                Expires = DateTime.UtcNow.AddDays(configuration.GetValue<int>("Jwt:RefreshTokenLifetimeDays")),
-                UserId = user.Id,
-                IsRevoked = false
-            });
             await dbContext.SaveChangesAsync();
 
-            return Results.Redirect(
-                $"{returnUrl}?access_token={HttpUtility.UrlEncode(accessToken)}&refresh_token={HttpUtility.UrlEncode(refreshToken)}");
+            return Results.Redirect(returnUrl);
         });
 
         return app;
     }
 }
-
-public record RefreshTokenModel(string AccessToken, string RefreshToken);

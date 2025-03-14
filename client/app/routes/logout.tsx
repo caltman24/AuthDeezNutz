@@ -3,14 +3,13 @@ import { destroySession, getSession } from "~/utils/session.server";
 
 export async function loader({ request }: { request: Request }) {
     const session = await getSession(request);
-    const tokens = session.get("tokens");
 
     const res = await fetch("http://localhost:5168/auth/logout", {
+        credentials: "include",
         headers: {
-            "Authorization": `Bearer ${tokens.access_token}`,
+            "Cookie": request.headers.get("Cookie") || "",
         }
     });
-
     console.log(res)
 
     if (res.status === 200) {
@@ -20,6 +19,8 @@ export async function loader({ request }: { request: Request }) {
             },
         });
     }
+
+    return redirect("/");
 }
 
 export function Logout() {
