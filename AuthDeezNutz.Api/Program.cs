@@ -35,6 +35,13 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
     }).AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+builder.Services.Configure<SecurityStampValidatorOptions>(opts =>
+{
+    // How frequently the security stamp should be validated during requests
+    // If the security stamp is changed, the user will be logged out
+    opts.ValidationInterval = TimeSpan.FromMinutes(1);
+});
+
 // Configure the Application Cookie from Identity
 // Can also configure the external cookie if needed
 builder.Services.ConfigureApplicationCookie(opts =>
@@ -63,7 +70,7 @@ builder.Services.AddAuthentication()
         opts.ClientId = builder.Configuration["Google:ClientId"]!;
         opts.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
         opts.CallbackPath = "/auth/google-cb";
-        
+
         // .net doesn't map the picture claim by default
         // ClaimTypes doesn't have a picture claim type
         opts.ClaimActions.MapJsonKey("picture", "picture");
@@ -91,12 +98,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/",
-        (HttpContext context) =>
-        {
-            return Results.Ok(context.User.Claims.Select(c => new { c.Type, c.Value }).ToList());
-        })
-    .RequireAuthorization();
+app.MapGet("/", (HttpContext context) => Results.Ok()).RequireAuthorization();
 
 app.MapAuthRoutes();
 

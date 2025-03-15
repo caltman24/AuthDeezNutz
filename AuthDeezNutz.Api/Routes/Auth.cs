@@ -50,6 +50,33 @@ public static class Auth
             await signInManager.SignOutAsync();
             return Results.Ok("Logged out successfully");
         }).RequireAuthorization();
+        
+        // get user claims
+        authGroup.MapGet("/user", (HttpContext context) =>
+        {
+            return Results.Ok(context.User.Claims.Select(c => new { c.Type, c.Value }).ToList());
+        }).RequireAuthorization();
+        
+        // Logout all sessions
+        // To revoke specific sessions, we would have to write middleware to track sessions
+        authGroup.MapPost("/revoke-sessions", async (
+            HttpContext context,
+            UserManager<AppUser> userManager,
+            SignInManager<AppUser> signInManager) =>
+        {
+            var user = await userManager.GetUserAsync(context.User);
+            if (user == null)
+            {
+                return Results.Unauthorized();
+            }
+
+            // Revoke all sessions for the user
+            await userManager.UpdateSecurityStampAsync(user);
+            
+            await signInManager.SignOutAsync();
+            
+            return Results.Ok("Sessions revoked successfully");
+        }).RequireAuthorization();
 
         return app;
     }
