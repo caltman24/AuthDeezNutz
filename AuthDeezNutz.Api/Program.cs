@@ -18,7 +18,8 @@ builder.Services.AddCors(opts =>
     {
         policy.WithOrigins("http://localhost:5173", "https://client.scalar.com");
         policy.WithMethods("GET", "POST");
-        policy.WithHeaders("Content-Type", "Cookie", "Accept");
+        policy.AllowAnyHeader();
+        policy.AllowCredentials();
     });
 });
 
@@ -37,6 +38,7 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
 
 builder.Services.ConfigureApplicationCookie(opts =>
 {
+    opts.Cookie.Name = "auth";
     opts.LoginPath = "/auth/login";
     opts.LogoutPath = "/auth/logout";
 
@@ -53,18 +55,12 @@ builder.Services.ConfigureApplicationCookie(opts =>
     };
 });
 
-builder.Services.AddAuthentication(opts =>
-    {
-        opts.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
-        opts.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
-        opts.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
+builder.Services.AddAuthentication()
     .AddGoogle(opts =>
     {
         opts.ClientId = builder.Configuration["Google:ClientId"]!;
         opts.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
         opts.CallbackPath = "/auth/google-cb";
-        opts.SaveTokens = true;
         opts.ClaimActions.MapJsonKey("picture", "picture");
     });
 

@@ -5,9 +5,8 @@ export async function loader({ request }: { request: Request }) {
     const session = await getSession(request);
 
     const res = await fetch("http://localhost:5168/auth/logout", {
-        credentials: "include",
         headers: {
-            "Cookie": request.headers.get("Cookie") || "",
+            "Cookie": request.headers.get("Cookie") || ""
         }
     });
     console.log(res)

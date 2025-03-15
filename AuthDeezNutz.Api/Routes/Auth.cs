@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualBasic;
 
 namespace AuthDeezNutz.Api.Routes;
 
@@ -41,12 +42,10 @@ public static class Auth
             });
         });
 
-        authGroup.MapGet("/logout", async (HttpContext context,SignInManager<AppUser> signInManager) =>
+        authGroup.MapGet("/logout", async (SignInManager<AppUser> signInManager) =>
         {
-            await context.SignOutAsync(IdentityConstants.ApplicationScheme);
-            await context.SignOutAsync(IdentityConstants.ExternalScheme);
-            await context.SignOutAsync();
             await signInManager.SignOutAsync();
+            return Results.Ok("Logged out successfully");
         }).RequireAuthorization();
 
         return app;
@@ -64,22 +63,30 @@ public static class Auth
             AppDbContext dbContext,
             UserManager<AppUser> userManager,
             [FromQuery] string returnUrl,
-            [FromServices] SignInManager<AppUser> signInManager) =>
+            SignInManager<AppUser> signInManager) =>
         {
+            // var res = await context.AuthenticateAsync(IdentityConstants.ExternalScheme);
+            // if (!res.Succeeded)
+            // {
+            //     return Results.BadRequest("Failed to authenticate with Google");
+            // }
+
+            // this method calls context.AuthenticateAsync(IdentityConstants.ExternalScheme) internally
+            // returns ExternalLoginInfo object
             var info = await signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
                 return Results.BadRequest("Failed to get info from Google");
             }
-
+            await signInManager.SignOutAsync();
+            
             var picture = info.Principal.FindFirstValue("picture");
             var givenName = info.Principal.FindFirstValue(ClaimTypes.GivenName);
             var surname = info.Principal.FindFirstValue(ClaimTypes.Surname);
 
             // try to sign in the user with this external login provider if the user already exists
-            var result =
-                await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
-            
+            // Sign in the user with this external login provider if the user already has a login.
+            var result = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
             if (result.Succeeded)
             {
                 return Results.Redirect(returnUrl);
@@ -115,10 +122,9 @@ public static class Auth
 
             // link the external login to the user
             await userManager.AddLoginAsync(user, info);
-            await signInManager.SignInAsync(user, isPersistent: true);
-
             await dbContext.SaveChangesAsync();
 
+            await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
             return Results.Redirect(returnUrl);
         });
 
