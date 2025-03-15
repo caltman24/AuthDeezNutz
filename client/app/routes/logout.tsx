@@ -9,17 +9,14 @@ export async function loader({ request }: { request: Request }) {
             "Cookie": request.headers.get("Cookie") || ""
         }
     });
-    console.log(res)
 
-    if (res.status === 200) {
-        return redirect("/", {
-            headers: {
-                "Set-Cookie": await destroySession(session),
-            },
-        });
-    }
+    const authCookie = res.headers.get("set-cookie");
 
-    return redirect("/");
+    return redirect("/", {
+        headers: {
+            "Set-Cookie": [await destroySession(session), authCookie].filter(Boolean).join(", ")
+        },
+    });
 }
 
 export function Logout() {

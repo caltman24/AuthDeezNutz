@@ -1,9 +1,7 @@
-using System.Security.Claims;
 using AuthDeezNutz.Api.Data;
 using AuthDeezNutz.Api.Models;
 using AuthDeezNutz.Api.Routes;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -28,6 +26,7 @@ builder.Services.AddDbContext<AppDbContext>(opts =>
     opts.UseNpgsql(builder.Configuration.GetConnectionString("Default"));
 });
 
+// Check the AddIdentity definition to see what is added by default
 builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
     {
         opts.User.RequireUniqueEmail = true;
@@ -36,12 +35,15 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
     }).AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+// Configure the Application Cookie from Identity
+// Can also configure the external cookie if needed
 builder.Services.ConfigureApplicationCookie(opts =>
 {
     opts.Cookie.Name = "auth";
     opts.LoginPath = "/auth/login";
     opts.LogoutPath = "/auth/logout";
 
+    // Since a js client is used, we need to override the default redirect behavior and return a 401 or 403
     opts.Events.OnRedirectToLogin = context =>
     {
         context.Response.StatusCode = 401;
@@ -61,6 +63,9 @@ builder.Services.AddAuthentication()
         opts.ClientId = builder.Configuration["Google:ClientId"]!;
         opts.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
         opts.CallbackPath = "/auth/google-cb";
+        
+        // .net doesn't map the picture claim by default
+        // ClaimTypes doesn't have a picture claim type
         opts.ClaimActions.MapJsonKey("picture", "picture");
     });
 

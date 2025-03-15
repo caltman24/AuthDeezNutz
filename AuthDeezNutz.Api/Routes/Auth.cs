@@ -18,8 +18,11 @@ public static class Auth
     {
         var authGroup = app.MapExternalAuthRoutes().MapGroup("/auth");
 
-        // Remix app hits this login endpoint
-        // Then, we redirect to the Google auth endpoint
+        // Initiate the Oauth flow by redirecting to the provider authentication page
+        // 1. The user authenticates with the provider directly
+        // 2. Then the provider redirects back to the callback endpoint configured with the provider(not the app callback)
+        // 3. Asp.Net middleware intercepts the callback request and processes the authentication
+        // 4. After successful authentication, the user is redirected back to the app callback endpoint specified in the RedirectUri
         authGroup.MapGet("/login-external", ([FromQuery] string provider, [FromQuery] string returnUrl) =>
         Results.Challenge(
             new AuthenticationProperties
@@ -55,50 +58,36 @@ public static class Auth
     {
         var authGroup = app.MapGroup("/oauth");
 
-        // After google authenticates, we redirect to this callback endpoint
-        // This callback is responsible for generating the access token using the user info provided by Google before redirecting back to the Remix app
-        // We redirect to the remix callback endpoint because the Remix app needs to set the access token in the cookie
+        // This callback handles creating/linking the user and signing in the user
         authGroup.MapGet("/callback", async (
             HttpContext context,
-            AppDbContext dbContext,
             UserManager<AppUser> userManager,
             [FromQuery] string returnUrl,
             SignInManager<AppUser> signInManager) =>
         {
-            // var res = await context.AuthenticateAsync(IdentityConstants.ExternalScheme);
-            // if (!res.Succeeded)
-            // {
-            //     return Results.BadRequest("Failed to authenticate with Google");
-            // }
-
             // this method calls context.AuthenticateAsync(IdentityConstants.ExternalScheme) internally
-            // returns ExternalLoginInfo object
             var info = await signInManager.GetExternalLoginInfoAsync();
             if (info == null)
             {
                 return Results.BadRequest("Failed to get info from Google");
             }
-            await signInManager.SignOutAsync();
-            
-            var picture = info.Principal.FindFirstValue("picture");
-            var givenName = info.Principal.FindFirstValue(ClaimTypes.GivenName);
-            var surname = info.Principal.FindFirstValue(ClaimTypes.Surname);
 
-            // try to sign in the user with this external login provider if the user already exists
-            // Sign in the user with this external login provider if the user already has a login.
+            // Signs in a user via a previously registered third party login
+            // This method calls SignOutAsync(IdentityConstants.ExternalScheme) internally if a provider is found
             var result = await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
             if (result.Succeeded)
             {
                 return Results.Redirect(returnUrl);
             }
 
-            // user does not exist, create user
+            // create or link user account
             var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-            if (email == null)
+            if (string.IsNullOrEmpty(email))
             {
-                return Results.BadRequest("Failed to get info from Google. Missing email.");
+                return Results.BadRequest("Email is required");
             }
 
+            // The email is used as the canonical identifier for the user across all providers including local
             var user = await userManager.FindByEmailAsync(email);
             if (user == null)
             {
@@ -111,20 +100,30 @@ public static class Auth
                     Role = "User"
                 };
                 // add user to db
-                await userManager.CreateAsync(user);
+                var createResult = await userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                {
+                    return Results.BadRequest("Failed to create user");
+                }
 
+                // Add claims from external provider
                 await userManager.AddClaimsAsync(user, [
-                    new Claim("picture", picture ?? ""),
-                    new Claim(ClaimTypes.GivenName, givenName ?? ""),
-                    new Claim(ClaimTypes.Surname, surname ?? "")
+                    new Claim("picture", info.Principal.FindFirstValue("picture") ?? ""),
+                    new Claim(ClaimTypes.GivenName, info.Principal.FindFirstValue(ClaimTypes.GivenName) ?? ""),
+                    new Claim(ClaimTypes.Surname, info.Principal.FindFirstValue(ClaimTypes.Surname) ?? "")
                 ]);
             }
 
-            // link the external login to the user
+            // link external provider
             await userManager.AddLoginAsync(user, info);
-            await dbContext.SaveChangesAsync();
-
-            await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, true);
+            
+            // Sign out the external provider
+            // use context.SignOut instead of signInManager.SignOut to explicitly sign out the external provider
+            await context.SignOutAsync(IdentityConstants.ExternalScheme);
+            
+            // We could use ExternalLoginSignInAsync here, but we can avoid the unnecessary db call
+            await signInManager.SignInAsync(user, true);
+            
             return Results.Redirect(returnUrl);
         });
 
