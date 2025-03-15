@@ -12,6 +12,8 @@ export async function loader({ request }: { request: Request }) {
 
     const authCookie = res.headers.get("set-cookie");
 
+    session.unset("authenticated");
+
     return redirect("/", {
         headers: {
             "Set-Cookie": [await destroySession(session), authCookie].filter(Boolean).join(", ")

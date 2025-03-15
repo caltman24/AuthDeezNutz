@@ -6,17 +6,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     const session = await getSession(request);
 
-    const res = await fetch("http://localhost:5168/", {
+    const res = await fetch("http://localhost:5168/auth/user", {
         credentials: "include",
         headers: {
-            "Cookie": request.headers.get("Cookie") || "",
-            "Accept": "application/json",
-        },
-    })
+            "Cookie": request.headers.get("Cookie") || ""
+        }
+    });
 
     if (res.ok) {
-        console.log(res)
         session.set("authenticated", true);
+        session.set("claims", await res.json());
 
         return redirect("/", {
             headers: {

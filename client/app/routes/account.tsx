@@ -1,7 +1,7 @@
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, json, redirect, useLoaderData } from "@remix-run/react";
 import { useAuth } from "~/context/auth";
-import { getSession } from "~/utils/session.server";
+import { destroySession, getSession } from "~/utils/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
     const session = await getSession(request);
@@ -10,15 +10,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
         return redirect("/login");
     }
 
-    const res = await fetch("http://localhost:5168/", {
+    const res = await fetch("http://localhost:5168/auth/user", {
         credentials: "include",
         headers: {
             "Cookie": request.headers.get("Cookie") || ""
         }
     });
 
-    if (!res.ok) {
-        return Response.json([])
+    if (res.status === 401) {
+        session.unset("authenticated");
+        return redirect("/login", {
+            headers: {
+                "Set-Cookie": await destroySession(session),
+            },
+        });
     }
 
     const data = await res.json();
