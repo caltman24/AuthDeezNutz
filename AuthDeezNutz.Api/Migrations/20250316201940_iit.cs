@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AuthDeezNutz.Api.Migrations
 {
     /// <inheritdoc />
-    public partial class init : Migration
+    public partial class iit : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -50,21 +50,6 @@ namespace AuthDeezNutz.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "RefreshTokens",
-                columns: table => new
-                {
-                    Token = table.Column<string>(type: "text", nullable: false),
-                    Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Expires = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IsRevoked = table.Column<bool>(type: "boolean", nullable: false),
-                    UserId = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_RefreshTokens", x => x.Token);
                 });
 
             migrationBuilder.CreateTable(
@@ -228,9 +213,6 @@ namespace AuthDeezNutz.Api.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens");
-
-            migrationBuilder.DropTable(
-                name: "RefreshTokens");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

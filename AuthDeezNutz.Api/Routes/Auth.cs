@@ -1,13 +1,9 @@
 ﻿using System.Security.Claims;
 using System.Web;
-using AuthDeezNutz.Api.Data;
 using AuthDeezNutz.Api.Models;
-using AuthDeezNutz.Api.Services;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace AuthDeezNutz.Api.Routes;
 
@@ -17,39 +13,15 @@ public static class Auth
     {
         var authGroup = app.MapExternalAuthRoutes().MapGroup("/auth");
 
-        // Remix app hits this login endpoint
-        // Then, we redirect to the Google auth endpoint
-        authGroup.MapGet("/login", ([FromQuery] string provider, [FromQuery] string returnUrl) => Results.Challenge(
+        // We pass in a redirect uri to a callback route on the remix app. The redirect after google auth provides the external cookie
+        authGroup.MapGet("/login-external", ([FromQuery] string provider, [FromQuery] string redirectUri) =>
+        Results.Challenge(
             new AuthenticationProperties
             {
-                RedirectUri = $"/oauth/callback?returnUrl={HttpUtility.UrlEncode(returnUrl)}",
+                RedirectUri = redirectUri,
+                // We Need to pass the provider name to the callback endpoint for ExternalLoginSignInAsync to work
                 Items = { { "LoginProvider", provider } }
             }, [provider]));
-
-        authGroup.MapPost("/refresh",
-            async (RefreshTokenModel refreshTokenModel,
-                IAuthService authService) =>
-            {
-                var res = await authService.RevokeAndRefreshTokens(refreshTokenModel.AccessToken,
-                    refreshTokenModel.RefreshToken);
-
-                return res == null
-                    ? Results.Unauthorized()
-                    : Results.Ok(new { res.Value.accessToken, res.Value.refreshToken });
-            }).RequireAuthorization();
-
-        authGroup.MapGet("/logout", async (HttpContext context, IAuthService authService) =>
-        {
-            var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            
-            if (userId != null)
-            {
-                await authService.RevokeAllUserRefreshTokens(userId);
-            }
-            
-            await context.SignOutAsync();
-            return Results.Redirect("/");
-        }).RequireAuthorization();
 
         return app;
     }
@@ -58,16 +30,10 @@ public static class Auth
     {
         var authGroup = app.MapGroup("/oauth");
 
-        // After google authenticates, we redirect to this callback endpoint
-        // This callback is responsible for generating the access token using the user info provided by Google before redirecting back to the Remix app
-        // We redirect to the remix callback endpoint because the Remix app needs to set the access token in the cookie
+        // After the remix app gets a response from the login with the external cookie, it will do a fetch request to this route with the external cookie
+        // The external cookie is what contains the info from the external provider
         authGroup.MapGet("/callback", async (
-            HttpContext context,
-            IAuthService authService,
-            AppDbContext dbContext,
-            IConfiguration configuration,
             UserManager<AppUser> userManager,
-            [FromQuery] string returnUrl,
             [FromServices] SignInManager<AppUser> signInManager) =>
         {
             var info = await signInManager.GetExternalLoginInfoAsync();
@@ -76,21 +42,16 @@ public static class Auth
                 return Results.BadRequest("Failed to get info from Google");
             }
 
+            // set the authentication scheme to bearer
+            signInManager.AuthenticationScheme = IdentityConstants.BearerScheme;
+
             // try to sign in the user with this external login provider if the user already exists
+            // this method calls SignInAsync internally and signs outs out of external scheme
             var result =
                 await signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, isPersistent: false);
             if (result.Succeeded)
             {
-                // user is already linked, generate access token 
-                var existingUser = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
-                if (existingUser == null)
-                {
-                    return Results.BadRequest("Failed to get existing user");
-                }
-
-                var (aToken, rToken) = await authService.GenerateTokensAsync(existingUser, ["user"], info.Principal);
-                return Results.Redirect(
-                    $"{returnUrl}?access_token={HttpUtility.UrlEncode(aToken)}&refresh_token={HttpUtility.UrlEncode(rToken)}");
+                return Results.Empty;
             }
 
             // user does not exist, create user
@@ -100,10 +61,10 @@ public static class Auth
                 return Results.BadRequest("Failed to get info from Google. Missing email.");
             }
 
+            // email is the canonical identifier for the user
             var user = await userManager.FindByEmailAsync(email);
             if (user == null)
             {
-                // Create new user
                 user = new AppUser
                 {
                     Email = email,
@@ -112,28 +73,22 @@ public static class Auth
                     Role = "User"
                 };
 
-                // add user to db
-                await userManager.CreateAsync(user);
+                await userManager.CreateAsync(user); // Add claims from external provider
+
+                await userManager.AddClaimsAsync(user, [
+                    new Claim("picture", info.Principal.FindFirstValue("picture") ?? ""),
+                    new Claim(ClaimTypes.GivenName, info.Principal.FindFirstValue(ClaimTypes.GivenName) ?? ""),
+                    new Claim(ClaimTypes.Surname, info.Principal.FindFirstValue(ClaimTypes.Surname) ?? "")
+                ]);
             }
 
             //link the external login to the user
             await userManager.AddLoginAsync(user, info);
             await signInManager.SignInAsync(user, isPersistent: false);
 
-            // generate access token 
-            var (accessToken, refreshToken) = await authService.GenerateTokensAsync(user, ["user"], info.Principal);
-            await dbContext.RefreshTokens.AddAsync(new RefreshToken
-            {
-                Token = refreshToken,
-                Created = DateTime.UtcNow,
-                Expires = DateTime.UtcNow.AddDays(configuration.GetValue<int>("Jwt:RefreshTokenLifetimeDays")),
-                UserId = user.Id,
-                IsRevoked = false
-            });
-            await dbContext.SaveChangesAsync();
 
-            return Results.Redirect(
-                $"{returnUrl}?access_token={HttpUtility.UrlEncode(accessToken)}&refresh_token={HttpUtility.UrlEncode(refreshToken)}");
+            // SignInAsync handles returning the bearer tokens
+            return Results.Empty;
         });
 
         return app;

@@ -1,9 +1,9 @@
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { Form, json, redirect, useActionData } from "@remix-run/react";
-import { getSession } from "~/utils/session.server";
+import { commitSession, getSession } from "~/utils/session.server";
 
 export async function action({ request }: { request: Request }) {
-    return redirect("https://localhost:7084/auth/login?provider=Google&returnUrl=http://localhost:5173/auth-cb");
+    return redirect("http://localhost:5168/auth/login-external?provider=Google&redirectUri=http://localhost:5173/auth-cb");
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {

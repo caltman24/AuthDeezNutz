@@ -10,11 +10,4 @@ public class AppDbContext : IdentityDbContext<AppUser>
     {
     }
     
-    public DbSet<RefreshToken> RefreshTokens { get; set; }
-    
-    protected override void OnModelCreating(ModelBuilder builder)
-    {
-        base.OnModelCreating(builder);
-        builder.Entity<RefreshToken>().HasKey(x => x.Token);
-    }
 }

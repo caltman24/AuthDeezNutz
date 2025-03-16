@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AuthDeezNutz.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250313143226_init")]
-    partial class init
+    [Migration("20250316201946_remove")]
+    partial class remove
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -91,29 +91,6 @@ namespace AuthDeezNutz.Api.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", (string)null);
-                });
-
-            modelBuilder.Entity("AuthDeezNutz.Api.Models.RefreshToken", b =>
-                {
-                    b.Property<string>("Token")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("Expires")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsRevoked")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Token");
-
-                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>

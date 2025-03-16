@@ -3,7 +3,6 @@ using AuthDeezNutz.Api.Data;
 using AuthDeezNutz.Api.Extensions;
 using AuthDeezNutz.Api.Models;
 using AuthDeezNutz.Api.Routes;
-using AuthDeezNutz.Api.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -27,14 +26,13 @@ builder.Services.AddDbContext<AppDbContext>(opts =>
     opts.UseNpgsql(builder.Configuration.GetConnectionString("Default"));
 });
 
-builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
-    {
-        opts.User.RequireUniqueEmail = true;
-        opts.Password.RequireDigit = true;
-        opts.Password.RequiredLength = 8;
-        opts.Password.RequireNonAlphanumeric = false;
-    }).AddEntityFrameworkStores<AppDbContext>()
-    .AddDefaultTokenProviders();
+builder.Services.AddIdentityCore<AppUser>()
+    .AddRoles<IdentityRole>()
+    .AddRoleManager<RoleManager<IdentityRole>>()
+    .AddSignInManager<SignInManager<AppUser>>()
+    .AddClaimsPrincipalFactory<UserClaimsPrincipalFactory<AppUser, IdentityRole>>()
+    .AddEntityFrameworkStores<AppDbContext>();
+
 
 builder.Services.AddAuthServices(builder.Configuration);
 builder.Services.AddAuthorizationBuilder()
@@ -44,7 +42,6 @@ builder.Services.AddAuthorizationBuilder()
         pb.RequireClaim(ClaimTypes.NameIdentifier);
         pb.Build();
     });
-builder.Services.AddScoped<IAuthService, AuthService>();
 
 var app = builder.Build();
 
@@ -61,7 +58,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/",
-    (HttpContext context) => { return Results.Ok(context.User.Claims.Select(c => new { c.Type, c.Value }).ToList()); }).RequireAuthorization();
+        (HttpContext context) =>
+        {
+            return Results.Ok(context.User.Claims.Select(c => new { c.Type, c.Value }).ToList());
+        })
+    .RequireAuthorization();
 
 app.MapAuthRoutes();
 

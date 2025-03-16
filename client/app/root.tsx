@@ -29,7 +29,6 @@ export const links: LinksFunction = () => [
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const session = await getSession(request);
-  console.log(session.get("tokens"))
 
   if (!session.get("authenticated")) {
     return Response.json({
