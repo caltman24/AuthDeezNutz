@@ -10,25 +10,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         return redirect("/login");
     }
 
-    const res = await fetch("http://localhost:5168/auth/user", {
-        credentials: "include",
-        headers: {
-            "Cookie": request.headers.get("Cookie") || ""
-        }
+
+    return Response.json({
+        claims: session.get("claims"),
     });
-
-    if (res.status === 401) {
-        session.unset("authenticated");
-        return redirect("/login", {
-            headers: {
-                "Set-Cookie": await destroySession(session),
-            },
-        });
-    }
-
-    const data = await res.json();
-
-    return Response.json(data)
 }
 
 export default function Account() {

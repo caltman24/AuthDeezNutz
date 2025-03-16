@@ -35,13 +35,6 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(opts =>
     }).AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
-builder.Services.Configure<SecurityStampValidatorOptions>(opts =>
-{
-    // How frequently the security stamp should be validated during requests
-    // If the security stamp is changed, the user will be logged out
-    opts.ValidationInterval = TimeSpan.FromMinutes(1);
-});
-
 // Configure the Application Cookie from Identity
 // Can also configure the external cookie if needed
 builder.Services.ConfigureApplicationCookie(opts =>

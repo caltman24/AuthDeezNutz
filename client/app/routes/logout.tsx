@@ -10,8 +10,10 @@ export async function loader({ request }: { request: Request }) {
         }
     });
 
+    // get the api auth cookie from the response
     const authCookie = res.headers.get("set-cookie");
 
+    // unset the session because the cookie wont be unset until the loader is done after redirect. Or else it will cause a redirect loop
     session.unset("authenticated");
 
     return redirect("/", {
